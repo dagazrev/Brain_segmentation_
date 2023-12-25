@@ -1,5 +1,6 @@
 import SimpleITK as sitk
 import itk
+import os
 
 def perform_registration_and_analysis(data_loader, output_folder, parameter_files):
     similar_images = data_loader.compare_histograms()  # Assume this returns a list of tuples (validation_image, training_image)
