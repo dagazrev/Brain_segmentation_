@@ -223,6 +223,10 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
             original_img_nifti = nib.load(image_path)
             img_data = original_img_nifti.get_fdata()
 
+            # Create a mask from the original image
+            # Squeeze the mask to remove any extra dimensions of size 1
+            mask = np.squeeze(img_data > 0)
+
             # Rescale to 0-255
             img_data = self.rescale_to_255(img_data)
 
@@ -234,12 +238,14 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
                 elif operation == 'NL':
                     img_data = self.non_local_means_denoising(img_data)
 
+            # Apply the mask to retain the original background
+            img_data = img_data * mask
             # Construct new filename
             base_name = os.path.basename(image_path)
             name, ext = os.path.splitext(base_name)
             if ext == '.gz':
                 name, _ = os.path.splitext(name)
-                ext = '.nii.gz'  # Correct extension for compressed NIfTI files
+                ext = '.nii.gz'
             new_name = f"{name}_PREPR_{'_'.join(operation_sequence)}{ext}"
 
             # Save the processed image
@@ -248,6 +254,10 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
 
             # Optionally display the slices
             # self.plot_slices(original_img_nifti.get_fdata(), img_data, image_path)
+
+
+
+
 
 
     def rescale_to_255(self, img_data):
