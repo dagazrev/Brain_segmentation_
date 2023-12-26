@@ -206,10 +206,6 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
         corrected_img_data = np.divide(img_data_float, bias_field, out=np.zeros_like(img_data_float), where=bias_field!=0)
         # Rescale the corrected data back to 0-255 range if necessary
         corrected_img_data_rescaled = np.clip(corrected_img_data, 0, 255)
-
-        # Save or return the corrected image
-        #corrected_nifti = nib.Nifti1Image(corrected_img_data, img_data.affine)
-        #nib.save(corrected_nifti, "corrected_image.nii.gz")
         # Cast back to uint8
         corrected_img_data_uint8 = corrected_img_data_rescaled.astype(np.uint8)
 
@@ -217,14 +213,13 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
         return corrected_img_data
     
     def process_images(self, operation_sequence):
-        training_data = self.retrieve_data('training', 0)
+        training_data = self.retrieve_data('test', 0)
 
         for image_path, _, _ in training_data:
             original_img_nifti = nib.load(image_path)
             img_data = original_img_nifti.get_fdata()
 
             # Create a mask from the original image
-            # Squeeze the mask to remove any extra dimensions of size 1
             mask = np.squeeze(img_data > 0)
 
             # Rescale to 0-255
@@ -252,7 +247,6 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
             processed_nifti = nib.Nifti1Image(img_data, original_img_nifti.affine)
             nib.save(processed_nifti, os.path.join(self.data_folder, new_name))
 
-            # Optionally display the slices
             # self.plot_slices(original_img_nifti.get_fdata(), img_data, image_path)
 
 
@@ -270,11 +264,6 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
         # Rescale the pixel values to span the full range
         p2, p98 = np.percentile(img_data, (2, 98))
         img_rescaled = exposure.rescale_intensity(img_data, in_range=(p2, p98))
-
-        # Save or return the enhanced image
-        #enhanced_nifti = nib.Nifti1Image(img_rescaled, img_data.affine)
-        #nib.save(enhanced_nifti, "enhanced_image.nii.gz")
-
         return img_rescaled
     
     def apply_clahe(self, img_data):
@@ -284,7 +273,7 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
         # Apply CLAHE to each slice
         clahe = exposure.equalize_adapthist
         img_clahe = np.zeros_like(img_data_rescaled)
-        for i in range(img_data_rescaled.shape[2]):  # Assuming the third axis is the 'slice' axis
+        for i in range(img_data_rescaled.shape[2]): 
             img_clahe[:, :, i] = clahe(img_data_rescaled[:, :, i])
 
         # Rescale back to 0-255
