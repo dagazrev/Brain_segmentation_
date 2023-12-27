@@ -12,6 +12,7 @@ from scipy.ndimage import gaussian_filter
 
 
 class data_handling:#remaing from dataloader since seeing the pytorch dataloaderxD
+    """This class has the methods to handle the data divided in training, test and validation"""
     def __init__(self, data_folder):
         self.data_folder = data_folder
         self.types = ['test', 'training', 'validation']
@@ -213,6 +214,10 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
         return corrected_img_data
     
     def process_images(self, operation_sequence):
+        """Image Preprocessing
+        Input: Operation Sequence that can be in any order. The order is done by the order in the list, can be one, 2 or all operations
+        Preprocessing order string is added in the output file so it can be seen what was applied
+        Output: preprocessed image. Plotting is optional, most likely used for reporting purposes"""
         training_data = self.retrieve_data('test', 0)
 
         for image_path, _, _ in training_data:
