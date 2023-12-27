@@ -3,6 +3,7 @@ import itk
 import os
 import nibabel as nib
 import numpy as np
+import csv
 
 def register_image(fixed_image_path, moving_image_path, fixed_mask_path, output_folder, parameter_files):
     fixed_image = itk.imread(fixed_image_path, itk.F)
@@ -96,8 +97,6 @@ def dice_score_per_tissue(true_labels, pred_labels, tissue_value):
     return 2. * intersection / total if total > 0 else 0
 
 
-import csv
-
 def calculate_segmentation_scores(data_handler):
     """
     Calculate Dice Score Coefficients for transformed segmentation images against original validation segmentations,
@@ -117,22 +116,22 @@ def calculate_segmentation_scores(data_handler):
         with open(csv_file_path, mode='w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',')
             # Write header
-            csv_writer.writerow(['Transformed Segmentation', 'CSF Dice Score', 'WM Dice Score', 'GM Dice Score'])
+            csv_writer.writerow(['Transformed Segmentation', 'CSF Dice Score', 'GM Dice Score', 'WM Dice Score'])
 
             for transformed_seg_file in transformed_segs:
                 transformed_seg_path = os.path.join(os.path.dirname(v_label_path), transformed_seg_file)
                 transformed_seg = nib.load(transformed_seg_path).get_fdata()
 
                 dice_scores = {}
-                for tissue_label in [1, 2, 3]:  # 1: CSF, 2: WM, 3: GM
+                for tissue_label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
                     dice_scores[tissue_label] = dice_score_per_tissue(original_seg, transformed_seg, tissue_label)
 
                 # Write data to CSV
                 csv_writer.writerow([
                     transformed_seg_file, 
-                    dice_scores[1], 
-                    dice_scores[2], 
-                    dice_scores[3]
+                    dice_scores[1],  # CSF
+                    dice_scores[2],  # GM
+                    dice_scores[3]   # WM
                 ])
 
         print(f"Dice scores for {v_folder_name} saved to {csv_file_path}")
