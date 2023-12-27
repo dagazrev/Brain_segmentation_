@@ -45,7 +45,7 @@
 // If you use a mask, this option is important. 
 // If the mask serves as region of interest, set it to false.
 // If the mask indicates which pixels are valid, then set it to true.
-(ErodeMask "false")
+(ErodeMask "true")
 
 
 // ******************** Multiresolution **********************
