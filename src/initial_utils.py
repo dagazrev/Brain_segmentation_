@@ -135,3 +135,49 @@ def calculate_segmentation_scores(data_handler):
                 ])
 
         print(f"Dice scores for {v_folder_name} saved to {csv_file_path}")
+
+
+def majority_voting(data_handler):
+    """
+    Perform majority voting on transformed segmentation images and calculate Dice Score Coefficients against original validation segmentations.
+    """
+    validation_data = data_handler.retrieve_data('validation', 0)
+
+    for v_image_path, v_label_path, _ in validation_data:
+        v_folder_name = os.path.basename(os.path.dirname(v_image_path))
+        original_seg_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_seg.nii.gz")
+        original_seg = nib.load(original_seg_path)
+        original_segs = original_seg.get_fdata()
+
+        transformed_segs_paths = [os.path.join(os.path.dirname(v_label_path), file) 
+                                  for file in os.listdir(os.path.dirname(v_label_path)) 
+                                  if '_seg_transformed.nii.gz' in file]
+
+        # Read all transformed segmentation files
+        transformed_segs = [nib.load(path).get_fdata() for path in transformed_segs_paths]
+
+        # Perform majority voting
+        majority_voting_seg = np.zeros_like(transformed_segs[0])
+        for i in range(majority_voting_seg.shape[0]):
+            for j in range(majority_voting_seg.shape[1]):
+                for k in range(majority_voting_seg.shape[2]):
+                    voxel_values = [seg[i, j, k] for seg in transformed_segs]
+                    majority_voting_seg[i, j, k] = np.argmax(np.bincount(voxel_values))
+
+        # Save the majority voting segmentation
+        majority_voting_path = os.path.join(os.path.dirname(v_label_path), 'majority_voting.nii.gz')
+        nib.save(nib.Nifti1Image(majority_voting_seg, original_seg.affine), majority_voting_path)
+
+        # Calculate and save Dice Score
+        dice_scores = {}
+        for tissue_label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
+            dice_scores[tissue_label] = dice_score_per_tissue(original_segs, majority_voting_seg, tissue_label)
+
+        csv_file_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_majority_voting_dice_scores.csv")
+        with open(csv_file_path, mode='w', newline='') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=',')
+            csv_writer.writerow(['CSF Dice Score', 'GM Dice Score', 'WM Dice Score'])
+            csv_writer.writerow([dice_scores[1], dice_scores[2], dice_scores[3]])
+
+        print(f"Majority voting Dice scores for {v_folder_name} saved to {csv_file_path}")
+
