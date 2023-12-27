@@ -10,4 +10,5 @@ parameter_files = ['src\Par0033similarity.txt', 'src\Par0033bspline.txt']
 
 #iu.calculate_segmentation_scores(obj)
 
-iu.majority_voting(obj)
+#iu.majority_voting(obj)
+iu.staple_fusion_and_dice(obj)

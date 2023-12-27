@@ -181,3 +181,51 @@ def majority_voting(data_handler):
 
         print(f"Majority voting Dice scores for {v_folder_name} saved to {csv_file_path}")
 
+
+def staple_fusion_and_dice(data_handler):
+    """
+    Perform STAPLE fusion on transformed segmentation images and calculate Dice Score Coefficients against original validation segmentations.
+    """
+    validation_data = data_handler.retrieve_data('validation', 0)
+
+    for v_image_path, v_label_path, _ in validation_data:
+        v_folder_name = os.path.basename(os.path.dirname(v_image_path))
+        original_seg_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_seg.nii.gz")
+        original_seg = nib.load(original_seg_path)
+        original_segs = original_seg.get_fdata()
+
+        transformed_segs_paths = [os.path.join(os.path.dirname(v_label_path), file) 
+                                  for file in os.listdir(os.path.dirname(v_label_path)) 
+                                  if '_seg_transformed.nii.gz' in file]
+
+        # Read all transformed segmentation files
+        transformed_segs = [sitk.ReadImage(path, sitk.sitkUInt8) for path in transformed_segs_paths]
+
+        # Initialize STAPLE output
+        staple_output = np.zeros_like(original_segs)
+
+        # Apply STAPLE for each label
+        for label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
+            staple_filter = sitk.STAPLEImageFilter()
+            staple_filter.SetForegroundValue(label)
+            fused_label = staple_filter.Execute(transformed_segs)
+            fused_label_array = sitk.GetArrayFromImage(fused_label)
+            staple_output[fused_label_array == 1] = label
+
+        # Save the STAPLE output
+        staple_output_path = os.path.join(os.path.dirname(v_label_path), 'staple_output.nii.gz')
+        nib.save(nib.Nifti1Image(staple_output, original_seg.affine), staple_output_path)
+
+        # Calculate and save Dice Score
+        dice_scores = {}
+        for tissue_label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
+            dice_scores[tissue_label] = dice_score_per_tissue(original_segs, staple_output, tissue_label)
+
+        csv_file_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_staple_dice_scores.csv")
+        with open(csv_file_path, mode='w', newline='') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=',')
+            csv_writer.writerow(['CSF Dice Score', 'GM Dice Score', 'WM Dice Score'])
+            csv_writer.writerow([dice_scores[1], dice_scores[2], dice_scores[3]])
+
+        print(f"STAPLE Dice scores for {v_folder_name} saved to {csv_file_path}")
+
