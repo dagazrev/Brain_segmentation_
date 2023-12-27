@@ -182,39 +182,43 @@ def majority_voting(data_handler):
         print(f"Majority voting Dice scores for {v_folder_name} saved to {csv_file_path}")
 
 
+def nib_to_sitk(img_data, affine):
+    # Convert numpy array to SimpleITK image and ensure it's uint8
+    sitk_img = sitk.GetImageFromArray(img_data.astype(np.uint8))
+    # Set origin and spacing using affine
+    origin = affine[:3, 3]
+    spacing = np.sqrt(np.sum(affine[:3, :3]**2, axis=0))
+    sitk_img.SetOrigin(origin)
+    sitk_img.SetSpacing(spacing)
+    return sitk_img
+
 def staple_fusion_and_dice(data_handler):
-    """
-    Perform STAPLE fusion on transformed segmentation images and calculate Dice Score Coefficients against original validation segmentations.
-    """
     validation_data = data_handler.retrieve_data('validation', 0)
 
     for v_image_path, v_label_path, _ in validation_data:
         v_folder_name = os.path.basename(os.path.dirname(v_image_path))
-        original_seg_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_seg.nii.gz")
-        original_seg = nib.load(original_seg_path)
-        original_segs = original_seg.get_fdata()
+        original_seg_nib = nib.load(os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_seg.nii.gz"))
+        original_segs = original_seg_nib.get_fdata()
 
-        transformed_segs_paths = [os.path.join(os.path.dirname(v_label_path), file) 
-                                  for file in os.listdir(os.path.dirname(v_label_path)) 
-                                  if '_seg_transformed.nii.gz' in file]
+        transformed_segs_paths = [os.path.join(os.path.dirname(v_label_path), file) for file in os.listdir(os.path.dirname(v_label_path)) if '_seg_transformed.nii.gz' in file]
 
-        # Read all transformed segmentation files
-        transformed_segs = [sitk.ReadImage(path, sitk.sitkUInt8) for path in transformed_segs_paths]
-
-        # Initialize STAPLE output
-        staple_output = np.zeros_like(original_segs)
+        # Convert transformed segmentations to SimpleITK images
+        transformed_segs = [nib_to_sitk(nib.load(path).get_fdata(), nib.load(path).affine) for path in transformed_segs_paths]
 
         # Apply STAPLE for each label
+        staple_output = np.zeros_like(original_segs)
         for label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
             staple_filter = sitk.STAPLEImageFilter()
             staple_filter.SetForegroundValue(label)
             fused_label = staple_filter.Execute(transformed_segs)
             fused_label_array = sitk.GetArrayFromImage(fused_label)
-            staple_output[fused_label_array == 1] = label
+            # Apply threshold
+            thresholded_label_array = (fused_label_array > 0.8).astype(int)
+            staple_output[thresholded_label_array == 1] = label
 
         # Save the STAPLE output
         staple_output_path = os.path.join(os.path.dirname(v_label_path), 'staple_output.nii.gz')
-        nib.save(nib.Nifti1Image(staple_output, original_seg.affine), staple_output_path)
+        nib.save(nib.Nifti1Image(staple_output, original_seg_nib.affine), staple_output_path)
 
         # Calculate and save Dice Score
         dice_scores = {}
@@ -228,4 +232,3 @@ def staple_fusion_and_dice(data_handler):
             csv_writer.writerow([dice_scores[1], dice_scores[2], dice_scores[3]])
 
         print(f"STAPLE Dice scores for {v_folder_name} saved to {csv_file_path}")
-
