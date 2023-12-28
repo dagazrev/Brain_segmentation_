@@ -254,11 +254,6 @@ class data_handling:#remaing from dataloader since seeing the pytorch dataloader
 
             # self.plot_slices(original_img_nifti.get_fdata(), img_data, image_path)
 
-
-
-
-
-
     def rescale_to_255(self, img_data):
         img_min, img_max = img_data.min(), img_data.max()
         img_data_rescaled = (img_data - img_min) / (img_max - img_min) * 255

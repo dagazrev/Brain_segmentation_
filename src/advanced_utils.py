@@ -30,6 +30,9 @@ def local_weighting_segmentation(data_handler):
         atlas_image_paths = []
         transformed_label_paths = []
 
+        atlases_paths = [os.path.join(os.path.dirname(v_label_path), file) for file in os.listdir(os.path.dirname(v_label_path)) if '_PREPR_BF_NL_EQ.nii.gz' in file]
+        labels_paths = [os.path.join(os.path.dirname(v_label_path), file) for file in os.listdir(os.path.dirname(v_label_path)) if '_seg_transformed.nii.gz' in file]
+
         for i in range(1, 21):  # Adjust the range as needed
             atlas_path = os.path.join(os.path.dirname(v_image_path), f"image_registered_IBSR_{i:02}_PREPR_BF_NL_EQ.nii.gz")
             label_path = os.path.join(os.path.dirname(v_label_path), f"IBSR_{i:02}_seg_transformed.nii.gz")
@@ -39,17 +42,17 @@ def local_weighting_segmentation(data_handler):
             atlas_image_paths.append(atlas_path)
             transformed_label_paths.append(label_path)
 
-
+        
         target_image = nib.load(v_image_path).get_fdata()
         final_segmentation = np.squeeze(np.zeros_like(target_image))
 
-        for atlas_path, label_path in zip(atlas_image_paths, transformed_label_paths):
+        for atlas_path, label_path in zip(atlases_paths, labels_paths):
             atlas_image = np.squeeze(nib.load(atlas_path).get_fdata())
             label_image = np.squeeze(nib.load(label_path).get_fdata())
 
             # Calculate similarity weight between atlas and target image
             similarity_weight = calculate_mutual_information(target_image, atlas_image)
-
+            print(similarity_weight.shape)
             # Check if similarity_weight is a scalar
             if np.isscalar(similarity_weight):
                 # Scalar multiplication should work fine
@@ -111,3 +114,23 @@ def calculate_mutual_information(target, atlas):
     # Calculate mutual information
     mi = mutual_info_score(target_flat, atlas_flat)
     return mi
+
+def postprocessing_registered_images(data_handler):
+    validation_data = data_handler.retrieve_data('validation', 0)
+    for v_image_path, v_label_path, _ in validation_data:
+        v_folder_name = os.path.basename(os.path.dirname(v_image_path))
+        original_img_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}.nii.gz")
+        original_seg = nib.load(original_img_path)
+        # Paths for registered atlas images and transformed labels
+        
+        atlas_image_paths = []
+
+        atlases_paths = [os.path.join(os.path.dirname(v_label_path), file) for file in os.listdir(os.path.dirname(v_label_path)) if '_PREPR_BF_NL_EQ.nii.gz' in file]
+        
+        atlases_read = [nib.load(path).get_fdata() for path in atlases_paths]
+        output_folder = os.path.dirname(v_image_path)
+        for file in atlases_read:
+            adjusted = data_handler.rescale_to_255(file)
+            output_image_path = os.path.join(output_folder, f"image_registered_{os.path.dirname(v_folder_name)}_PREPR_BF_NL_EQ.nii.gz")
+            nib.save(nib.Nifti1Image(adjusted, original_seg.affine), output_image_path)
+

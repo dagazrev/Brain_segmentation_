@@ -207,17 +207,18 @@ def staple_fusion_and_dice(data_handler):
 
         # Apply STAPLE for each label
         staple_output = np.zeros_like(original_segs)
-        for label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
-            staple_filter = sitk.STAPLEImageFilter()
-            staple_filter.SetForegroundValue(label)
-            fused_label = staple_filter.Execute(transformed_segs)
-            fused_label_array = sitk.GetArrayFromImage(fused_label)
-            # Apply threshold
-            thresholded_label_array = (fused_label_array > 0.8).astype(int)
-            staple_output[thresholded_label_array == 1] = label
-
+        #for label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
+        #    staple_filter = sitk.STAPLEImageFilter()
+        #    staple_filter.SetForegroundValue(label)
+        #    fused_label = staple_filter.Execute(transformed_segs)
+        #    fused_label_array = sitk.GetArrayFromImage(fused_label)
+        #    # Apply threshold
+        #    thresholded_label_array = (fused_label_array > 0.8).astype(int)
+        #    staple_output[thresholded_label_array == 1] = label
+        reference = sitk.MultiLabelSTAPLE(transformed_segs)
+        staple_output = sitk.GetArrayFromImage(reference)
         # Save the STAPLE output
-        staple_output_path = os.path.join(os.path.dirname(v_label_path), 'staple_output.nii.gz')
+        staple_output_path = os.path.join(os.path.dirname(v_label_path), 'staple_output_tst.nii.gz')
         nib.save(nib.Nifti1Image(staple_output, original_seg_nib.affine), staple_output_path)
 
         # Calculate and save Dice Score
@@ -225,7 +226,7 @@ def staple_fusion_and_dice(data_handler):
         for tissue_label in [1, 2, 3]:  # 1: CSF, 2: GM, 3: WM
             dice_scores[tissue_label] = dice_score_per_tissue(original_segs, staple_output, tissue_label)
 
-        csv_file_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_staple_dice_scores.csv")
+        csv_file_path = os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_staple_dice_scores_tst.csv")
         with open(csv_file_path, mode='w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',')
             csv_writer.writerow(['CSF Dice Score', 'GM Dice Score', 'WM Dice Score'])
