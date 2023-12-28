@@ -16,7 +16,7 @@ import initial_utils as iu
 from sklearn.metrics import mutual_info_score
 
 
-def local_weighting_segmentation(data_handler):
+def local_weighting_segmentation(data_handler, similarity_metric='MI'):
     """
     Perform local weighting segmentation on validation images using registered atlas images and calculate Dice Score Coefficients.
     """
@@ -33,55 +33,50 @@ def local_weighting_segmentation(data_handler):
         atlases_paths = [os.path.join(os.path.dirname(v_label_path), file) for file in os.listdir(os.path.dirname(v_label_path)) if '_PREPR_BF_NL_EQ.nii.gz' in file]
         labels_paths = [os.path.join(os.path.dirname(v_label_path), file) for file in os.listdir(os.path.dirname(v_label_path)) if '_seg_transformed.nii.gz' in file]
 
-        for i in range(1, 21):  # Adjust the range as needed
-            atlas_path = os.path.join(os.path.dirname(v_image_path), f"image_registered_IBSR_{i:02}_PREPR_BF_NL_EQ.nii.gz")
-            label_path = os.path.join(os.path.dirname(v_label_path), f"IBSR_{i:02}_seg_transformed.nii.gz")
-
-        # Check if both the atlas image and label image exist
-        if os.path.exists(atlas_path) and os.path.exists(label_path):
-            atlas_image_paths.append(atlas_path)
-            transformed_label_paths.append(label_path)
-
         
         target_image = nib.load(v_image_path).get_fdata()
         final_segmentation = np.squeeze(np.zeros_like(target_image))
 
+        weight_sum = 0  # To keep track of the total weight
         for atlas_path, label_path in zip(atlases_paths, labels_paths):
-            atlas_image = np.squeeze(nib.load(atlas_path).get_fdata())
-            label_image = np.squeeze(nib.load(label_path).get_fdata())
+            atlas_image = nib.load(atlas_path).get_fdata()
+            label_image = nib.load(label_path).get_fdata()
 
-            # Calculate similarity weight between atlas and target image
-            similarity_weight = calculate_mutual_information(target_image, atlas_image)
-            print(similarity_weight.shape)
-            # Check if similarity_weight is a scalar
-            if np.isscalar(similarity_weight):
-                # Scalar multiplication should work fine
-                weighted_label_image = similarity_weight * label_image
+            # Select the similarity metric
+            if similarity_metric == 'MI':
+                similarity_weight = calculate_mutual_information(target_image, atlas_image)
+            elif similarity_metric == 'NCC':
+                similarity_weight = calculate_normalized_cross_correlation(target_image, atlas_image)
             else:
-                # If similarity_weight is an array, ensure it has the correct shape
-                similarity_weight = np.squeeze(similarity_weight)
-                if similarity_weight.shape != label_image.shape:
-                    raise ValueError("Shape of similarity_weight does not match label_image")
-                weighted_label_image = similarity_weight * label_image
-            print(final_segmentation.shape)
-            print(weighted_label_image.shape)
-            # Add the weighted label image to final segmentation
-            final_segmentation += weighted_label_image
+                raise ValueError("Unknown similarity metric specified")
 
-        # After the loop, also ensure final_segmentation does not have singleton dimensions
-        final_segmentation = np.squeeze(final_segmentation)
+            similarity_weight = calculate_mutual_information(target_image, atlas_image)
+            weighted_label_image = similarity_weight * label_image
+            final_segmentation += weighted_label_image
+            weight_sum += similarity_weight
+
+        # Avoid division by zero
+        weight_sum += np.finfo(float).eps
 
         # Normalize and finalize the segmentation
-        final_segmentation = np.round(final_segmentation / len(atlas_image_paths)).astype(int)
+        final_segmentation /= weight_sum
+        final_segmentation = np.round(final_segmentation).astype(int)
+
+        # Replace any NaN or inf values
+        final_segmentation = np.nan_to_num(final_segmentation, nan=0, posinf=0, neginf=0)
+
+        # Debug prints
+        print(f"Weight Sum for {v_folder_name}: {weight_sum}")
+        print(f"Max of final_segmentation after normalization: {np.max(final_segmentation)}")
 
         # Save the final segmentation
         final_seg_nifti = nib.Nifti1Image(final_segmentation, nib.load(v_image_path).affine)
-        nib.save(final_seg_nifti, os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_local_weighting_segmentation.nii.gz"))
+        nib.save(final_seg_nifti, os.path.join(os.path.dirname(v_label_path), f"{v_folder_name}_local_weighting_segmentation_{similarity_metric}.nii.gz"))
 
         # Calculate and save the Dice Scores
         original_seg = nib.load(v_label_path).get_fdata()
         dice_scores = calculate_dice_scores(original_seg, final_segmentation)
-        save_dice_scores(dice_scores, os.path.dirname(v_label_path), v_folder_name)
+        save_dice_scores(dice_scores, os.path.dirname(v_label_path), v_folder_name, similarity_metric)
 
 def calculate_dice_scores(original_seg, final_segmentation):
     dice_scores = {}
@@ -89,15 +84,15 @@ def calculate_dice_scores(original_seg, final_segmentation):
         dice_scores[tissue_label] = iu.dice_score_per_tissue(original_seg, final_segmentation, tissue_label)
     return dice_scores
 
-def save_dice_scores(dice_scores, output_folder, v_folder_name):
-    csv_file_path = os.path.join(output_folder, f"{v_folder_name}_local_weighting_dice_scores.csv")
+def save_dice_scores(dice_scores, output_folder, v_folder_name, similarity_metric):
+    csv_file_path = os.path.join(output_folder, f"{v_folder_name}_{similarity_metric}_local_weighting_dice_scores.csv")
     with open(csv_file_path, 'w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file, delimiter=',')
         csv_writer.writerow(['Tissue Type', 'Dice Score'])
         for tissue_label in [1, 2, 3]:
             csv_writer.writerow([f"Tissue {tissue_label}", dice_scores[tissue_label]])
 
-    print(f"Dice scores for {v_folder_name} saved to {csv_file_path}")
+    print(f"Dice scores for {v_folder_name} with {similarity_metric} saved to {csv_file_path}")
 
 def calculate_mutual_information(target, atlas):
     """
@@ -134,3 +129,17 @@ def postprocessing_registered_images(data_handler):
             output_image_path = os.path.join(output_folder, f"image_registered_{os.path.dirname(v_folder_name)}_PREPR_BF_NL_EQ.nii.gz")
             nib.save(nib.Nifti1Image(adjusted, original_seg.affine), output_image_path)
 
+
+def calculate_normalized_cross_correlation(target, atlas):
+    """
+    Calculate the normalized cross-correlation between two images.
+    
+    :param target: Target image array.
+    :param atlas: Atlas image array.
+    :return: Normalized cross-correlation score.
+    """
+    target_flat = target.ravel() - np.mean(target)
+    atlas_flat = atlas.ravel() - np.mean(atlas)
+    correlation = np.sum(target_flat * atlas_flat)
+    normalization = np.sqrt(np.sum(target_flat**2) * np.sum(atlas_flat**2))
+    return correlation / normalization if normalization != 0 else 0

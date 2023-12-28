@@ -16,7 +16,7 @@ parameter_files = ['src\Par0033similarity.txt', 'src\Par0033bspline.txt']
 
 #iu.register_and_propagate_labels(obj, parameter_files)
 
-au.postprocessing_registered_images(obj)
+#au.postprocessing_registered_images(obj)
 
 #iu.calculate_segmentation_scores(obj)
 
@@ -24,4 +24,4 @@ au.postprocessing_registered_images(obj)
 #iu.staple_fusion_and_dice(obj)
 
 #####Advanced Methods
-#au.local_weighting_segmentation(obj)
+au.local_weighting_segmentation(obj, 'NCC')
